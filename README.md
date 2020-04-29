@@ -3,7 +3,7 @@ This project process raw data of the Dartmouth project  into tables that can be 
 The code is not complete as some data columns are still missing, but the code can be easily extended.
 
 How to use:
-
+The script is python 3.6 runable.
 To use this code, simply put all required files in the same directory with this script. Then run the script.
 
 $ python3 elements.py
