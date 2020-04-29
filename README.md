@@ -17,7 +17,9 @@ IRB_90679_Chapman_AMI_visits_w_prov_type_12132018
 
 Then run the script.
 
-`$ python3 elements.py'
+```
+$ python3 elements.py
+```
 
 The script will create a target.csv file with all the data columns in it.
 
