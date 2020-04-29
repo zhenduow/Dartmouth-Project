@@ -7,12 +7,19 @@ The script is python 3.6 runable.
 To use this code, simply put all required files in the same directory with this script. 
 
 Files needed for run:
+
 IRB_90679_Chapman_AMI_demographics_12132018
+
 IRB_90679_Chapman_AMI_diagnoses_12132018
+
 IRB_90679_Chapman_AMI_labs_12132018
+
 IRB_90679_Chapman_AMI_med_admin_12132018
+
 IRB_90679_Chapman_AMI_med_orders_12132018
+
 IRB_90679_Chapman_AMI_procedures_12132018
+
 IRB_90679_Chapman_AMI_visits_w_prov_type_12132018
 
 Then run the script.
