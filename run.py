@@ -1,9 +1,35 @@
+'''
+
+This code is for converting the raw data of Dartmouth Project into a structured dataframe that can be used by machine learning systems.
+The code is not complete as some data columns are still missing, but the code can be easily extended.
+
+How to use:
+
+To use this code, simply put all required files in the same directory with this script. Then run the script.
+
+$ python3 elements.py
+
+The script will create a target.csv file with all the data columns in it.
+
+Code configuration:
+
+The code organize all the features in tables by splitting them to different functions.
+Each function handles one table in the documentation 'AMI_MasterFlatFile_Data_Dictionary_03.13.19_IMR'.
+This segment the both the features and the code so that it is easy to debug and modify.
+
+For any further questions, please email to zhenduow@cs.utah.edu
+
+'''
+
+
+
 import datetime
 import time
 import statistics as stat
 import pandas as pd
-pd.set_option('display.max_rows', None)
+import re
 import numpy as np
+pd.set_option('display.max_rows', None)
 
 DIAGNOSES_PATH = ".\\IRB_90679_Chapman_AMI_diagnoses_12132018.txt"
 LABS_PATH = ".\\IRB_90679_Chapman_AMI_labs_12132018.txt"
@@ -81,13 +107,112 @@ ADDITIONAL_VESSEL_CODE = '92944'
 
 CHEST_PAIN_NAMES = ['CHEST PAIN ON BREATHING', 'CHEST PAIN UNSPECIFIED', 'OTHER CHEST PAIN']
 FAMILY_DEPRESSION_CODE = ['Z81.8', 'V17.0']
+AMI_FLAG_CODE = ['410.00', '410.01', '410.10', 'I21.09', '410.11', 'I21.0', 'I21.02', '410.20','410.21',
+                         '410.30', '410.31', 'I21.11', '410.40', '410.41', 'I21.19','410.50','410.51', '410.60',
+                         '410.61', '410.70', '410.71', 'I21.4', '410.80', '410.81', 'I21.29', 'I21.2', '410.90',
+                         '410.91', 'I21.3']
+CABG_FLAG_CODE = ['36.1', 'I25.810']
+PCI_FLAG_CODE = ['V45.82', 'Z95.5']
+PVD_FLAG_CODE = ['443.9', 'I73.9']
+ANGINA_FLAG_CODE = ['I20.9', '413.9']
+UNSTABLE_ANGINA_FLAG_CODE = ['411.1', 'I20.0']
+DEPRESSION_FLAG_CODE = ['296.2','296.22','296.23','296.3','296.32','296.33','300','300.01','300.02','300.09','300.21',
+                                '300.22','300.23','300.29','300.3','300.4','300.6','300.7','300.81','300.82','300.89','300.9',
+                                '308','308.1','308.2','308.3','308.4','308.9','309','309.1','309.24','309.28','309.29','309.3',
+                                '309.4','309.81','309.82','309.83','309.89','309.9','311']
+HYPERTENSION_FLAG_CODE = ['I10','I11.0','I11.9','I12.0','I12.9','I13.0','I13.10','I13.11','I13.2','I15.0','I15.1','I15.2',
+                          'I15.8','I15.9','I16.0','I16.1','401.9','402','402.11','402.9','402.91','403','403.01','403.1',
+                          '403.11','403.9','403.91','404.1','404.11','404.12','404.9','404.91','404.92','404.93','405.91','405.99']
 
 ECHOCARDIOGRAPHY_CODE = ['INTRACARDIAC ECHOCARDIOGRAPHY', 'Catheter, intracardiac echocardiography']
+IN_HOSPITAL_HF_CODE = ['I50.1','I50.20','I50.21','I50.22','I50.23','I50.30','I50.31','I50.32','I50.33','I50.40',
+                       'I50.41','I50.42','I50.43','I50.810','I50.811','I50.813','I50.814','I50.82','I50.84','I50.89',
+                       'I50.9','428','428.1','428.2','428.21','428.22','428.23','428.3','428.31','428.32','428.33',
+                       '428.4','428.41','428.42','428.43','428.9']
+IN_HOSPITAL_ISCHEMIA_CODE = ['435.9','I63.00','I63.012','I63.02','I63.112','I63.113','I63.12','I63.131','I63.132',
+                             'I63.133','I63.19','I63.211','I63.219','I63.22','I63.232','I63.233','I63.30','I63.311',
+                             'I63.312','I63.313','I63.319','I63.323','I63.331','I63.332','I63.39','I63.40','I63.411',
+                             'I63.412','I63.413','I63.419','I63.421','I63.422','I63.431','I63.432','I63.441','I63.442',
+                             'I63.449','I63.49','I63.50','I63.511','I63.512','I63.513','I63.519','I63.521','I63.522',
+                             'I63.529','I63.531','I63.532','I63.533','I63.539','I63.541','I63.542','I63.543','I63.8',
+                             'I63.81','I63.89','I63.9']
+CARDIAC_PROCEDURE_FLAG_PATTERN = ['35\..*','36\..*','37\..*','38\..*','39\..*','33016','33017','33018','33019','3302[^\.]*',
+                                  '3303[^\.]*','3304[^\.]*','3305[^\.]*','3306[^\.]*','3307[^\.]*','3308[^\.]*','3309[^\.]*',
+                                  '331[^\.]*','332[^\.]*','333[^\.]*','334[^\.]*','335[^\.]*','336[^\.]*','337[^\.]*','338[^\.]*',
+                                  '339[^\.]*','021.*','024.*','025.*','027.*','028.*','02B.*','02C.*','02F.*','02H.*','02J.*',
+                                  '02K.*','02L.*','02N.*','02P.*','02Q.*','02R.*','02S.*','02T.*','02U.*','02V.*','02W.*','02Y.*']
 
-CHF_CODE = ['CHRONIC COMBINED SYSTOLIC AND DIASTOLIC CHF',
-            'ACUTE ON CHRONIC COMB SYSTOLIC & DIASTOLIC CHF',
-            'UNSPECIFIED COMBINED SYSTOLIC & DIASTOLIC CHF',
-            'ACUTE COMBINED SYSTOLIC AND DIASTOLIC CHF']
+
+COMORBID_ARRHYTHMIA_PATTERN = ['I49\..*', '427\..*']
+COMORBID_ANEMIA_PATTERN = ['280\..*','281\..*','282\..*','283\..*','284\..*','285\..*','286\..*','287\..*','288\..*','289\..*',
+                           'D5.\..*','D6.\..*','D7.\..*','D8.\..*']
+COMORBID_HYPERTENSION_PATTERN = ['I10\..*','I11\..*','I12\..*','I13\..*','I14\..*','I15\..*','I16\..*',
+                                 '401\..*','402\..*','403\..*','404\..*','405\..*']
+COMORBID_COPD_PATTERN = ['J44\..*','490\..*','491\..*','492\..*','493\..*','494\..*','495\..*','496\..*']
+COMORBID_CKD_PATTERN = ['585\..*','N18\..*']
+COMORBID_STROKE_PATTERN = ['430\..*','431\..*','432\..*','433\..*','434\..*','435\..*','436\..*','437\..*','438\..*','I6.\..*']
+COMORBID_TOBACCO_USE_CODE = ['Z72.0', '305.1']
+COMORBID_DEPRESSION_CODE = DEPRESSION_FLAG_CODE
+COMORBID_HYPERCHOLESTEROLEMIA_PATTERN = ['272\..*','E78\..*']
+COMORBID_CAD_PATTERN = ['410\..*','411\..*','412\..*','413\..*','414\..*', 'I20\..*','I21\..*','I22\..*','I23\..*','I24\..*','I25\..*']
+PRIOR_REVASCULARIZATION_PATTERN = ['36\.1.*','36\.2.*','36\.3.*']
+COMORBID_DIABETES_CC_PATTERN = ['250\..*','E08\..*','E09\..*','E10\..*','E11\..*','E12\..*','E13\..*']
+COMORBID_DIABETES_PATTERN = COMORBID_DIABETES_CC_PATTERN
+COMORBID_CHF_CODE = ['I50.20','I50.21','I50.22','I50.23','428','428.1','428.2','428.21','428.22','428.23','428.3',
+                     '428.31','428.32','428.33','428.4','428.41','428.42','428.43','428.9']
+COMORBID_MI_PATTERN = COMORBID_CAD_PATTERN
+COMORBID_PERIPHERAL_VASCULAR_DISEASE_CODE = ['443.9','I73.9']
+COMORBID_CEREBROVASCULAR_DISEASE_PATTERN = COMORBID_STROKE_PATTERN
+COMORBID_DEMENTIA_PATTERN = ['294\.1.*','294\.2.*','F02\..*','F03\..*']
+COMORBID_CHRONIC_PULMONARY_DISEASE_PATTERN = COMORBID_COPD_PATTERN
+COMORBID_RHEUMATOLOGIC_DISEASE_PATTERN = ['M06\..*','714\..*']
+COMORBID_PEPTIC_ULCER_DISEASE_PATTERN = ['531\..*', '533\..*', 'K27\..*']
+COMORBID_MILD_LIVER_DISEASE_PATTERN = ['570\..*', '571\..*', '572\..*', '573\..*', 'K70\..*','K71\..*',
+                                       'K72\..*','K73\..*','K74\..*','K75\..*','K76\..*','K77\..*']
+COMORBID_HEMIPLEGIA_OR_PARAPLEGIA_PATTERN = ['G81\..*', 'G82\..*', '344\.1', '342\..*']
+COMORBID_RENAL_DISEASE_PATTERN = ['58.\..*', 'N00\..*','N01\..*','N02\..*','N03\..*','N04\..*','N05\..*','N06\..*','N07\..*','N08\..*',
+                                  'N09\..*','N10\..*','N11\..*','N12\..*','N13\..*','N14\..*','N15\..*','N16\..*', 'N17.*', 'N19.*']
+COMORBID_MODERATE_OR_SEVERE_LIVER_DISEASE_PATTERN = COMORBID_MILD_LIVER_DISEASE_PATTERN
+COMORBID_AIDS_PATTERN = ['042\..*','B20\..*']
+
+
+
+CHF_CODE = ['CHRONIC COMBINED SYSTOLIC AND DIASTOLIC CHF', 'ACUTE ON CHRONIC COMB SYSTOLIC & DIASTOLIC CHF',
+            'UNSPECIFIED COMBINED SYSTOLIC & DIASTOLIC CHF', 'ACUTE COMBINED SYSTOLIC AND DIASTOLIC CHF']
+
+DISCH_MED_BB_FLAG_PATTERN = ['Metoprolol','Carvedilol','Bisoprolol', 'atenolol']
+DISCH_MED_ANTIDEP_FLAG_PATTERN = ['zimeldine', 'citalopram', 'paroxetine', 'sertraline', 'fluoxetine', 'alaproclate', 'escitalopram',
+                                  'fluvoxamine', 'etoperidone','quinupramine', 'clomipramine', 'opipramol', 'desipramine', 'lofepramine',
+                                  'iprindole', 'dimetacrine', 'imipramine', 'melitracen', 'amitriptyline', 'doxepin', 'maprotiline',
+                                  'dosulepin', 'dibenzepin', 'amoxapine', 'trimipramine', 'protriptyline', 'imipramine', 'butriptyline',
+                                  'amineptine', 'nortriptyline', 'toloxatone', 'moclobemide', 'oxaflozane', 'duloxetine', 'minaprine',
+                                  'oxitriptan', 'gepirone', 'desvenlafaxine', 'mianserin', 'pivagabine', 'Hyperici', 'viloxazine', 'milnacipran',
+                                  'trazodone', 'agomelatine', 'mirtazapine', 'tianeptine', 'nefazodone', 'venlafaxine', 'nomifensine', 'tryptophan',
+                                  'reboxetine', 'vilazodone', 'bupropion', 'bifemelane', 'medifoxamine', 'vortioxetine', 'iproclozide',
+                                  'tranylcypromine', 'nialamide', 'iproniazide', 'isocarboxazid', 'phenelzine']
+DISCH_MED_ACE_ARB_FLAG_PATTERN = ['enalapril', 'delapril', 'cilazapril', 'perindopril', 'ramipril', 'imidapril', 'quinapril',
+                                  'moexipril', 'lisinopril', 'spirapril', 'trandolapril', 'fosinopril', 'temocapril', 'benazepril',
+                                  'captopril', 'zofenopril','Eplerenone', 'spironolactone']
+DISCH_MED_ASPIRIN_FLAG_PATTERN = ['aspirin']
+NSTEMI_FLAG_CODE = ['410.71', 'I21.4']
+REHAB_FLAG_CODE = ['V57.89', 'V57.3']
+
+KILLIP_CLASS_CODE_I = ['I50.20','I50.21','I50.22','I50.23','428','428.1','428.2','428.21','428.22','428.23','428.3',
+                     '428.31','428.32','428.33','428.4','428.41','428.42','428.43','428.9']
+KILLIP_CLASS_CODE_II = ['786.7','R09.89']
+KILLIP_CLASS_CODE_III = ['518.4','J81.0','J81.1']
+KILLIP_CLASS_CODE_IV = ['785.51', 'R57.0']
+LVEF_CODE = ['I50.1', '428.1']
+CHF_FLAG_CODE = ['I50.20','I50.21','I50.22','I50.23','428','428.1','428.2','428.21','428.22','428.23','428.3',
+                     '428.31','428.32','428.33','428.4','428.41','428.42','428.43','428.9']
+POST_MI_CABG_FLAG_CODE1 = ['36.1','I25.810']
+POST_MI_CABG_FLAG_PATTERN2 = ['410\..*','411\..*','412\..*','413\..*','414\..*','I20\..*','I21\..*',
+                              'I22\..*','I23\..*','I24\..*','I25\..*']
+HISTORY_STROKE_FLAG_PATTERN = ['430\..*','431\..*','432\..*','433\..*','434\..*','435\..*','436\..*',
+                            '437\..*','438\..*','I60\..*','I61\..*','I62\..*','I63\..*','I64\..*',
+                            'I65\..*','I66\..*','I67\..*','I68\..*','I69\..*']
+
+IN_HOSPITAL_PCI_CODE = ['V45.82', 'Z98.61']
 
 def get_date_diff(discharge_date, admit_date):
     '''
@@ -815,7 +940,97 @@ def ADMINISTRATIVE_DATA(target_df, diagnoses_df, visits_df):
 
     return target_df
 
-def DEMOGRAPHICS_ADDITIONS(target_df):
+def DISCHARGE_INFORMATION(target_df, diagnoses_df, visits_df, med_orders_df):
+    '''
+    Get discharge information table columns
+    :param target_df:
+    :return:
+    '''
+
+    target_df['UNSTABLE_ANGINA_FLAG'] = [0] * len(target_df)
+    target_df['STEMI_FLAG'] = [0] * len(target_df)
+    target_df['NSTEMI_FLAG'] = [0] * len(target_df)
+    target_df['TRANSFER_AT_DISCHARGE_FLAG'] = [0] * len(target_df)
+    target_df['DISCH_MED_BB_FLAG'] = [0] * len(target_df)
+    target_df['DISCH_MED_ANTIDEP_FLAG'] = [0] * len(target_df)
+    target_df['DISCH_MED_ACE_ARB_FLAG'] = [0] * len(target_df)
+    target_df['DISCH_MED_ASPIRIN_FLAG'] = [0] * len(target_df)
+    target_df['DISCH_MED_BB_METHOD'] = [0] * len(target_df)
+    target_df['DISCH_MED_ANTIDEP_METHOD'] = [0] * len(target_df)
+    target_df['DISCH_MED_ACE_ARB_METHOD'] = [0] * len(target_df)
+    target_df['DISCH_MED_ASPIRIN_METHOD'] = [0] * len(target_df)
+
+
+    for iter, row in target_df.iterrows():
+        pat_id = row['PERSON_ID']
+        # get the patients all visit rows
+        all_visits_df = diagnoses_df[diagnoses_df['PAT_ID'] == pat_id]
+        ACUTE_MYOCARDIAL_INFARCTION_df = all_visits_df[all_visits_df['CODE'].isin(ACUTE_MYOCARDIAL_INFARCTION_CODE)]
+        all_adm_dates = list(ACUTE_MYOCARDIAL_INFARCTION_df['ADM_DATE'].values)
+        all_visit_no = list(ACUTE_MYOCARDIAL_INFARCTION_df['VISIT_NO'].values)
+
+        # get the earlist adm and visit_nod
+        if len(all_adm_dates) > 0:
+            date_pairs = list(zip(all_adm_dates, all_visit_no))
+            date_pairs.sort(key=lambda x: time.strptime(x[0], '%m/%d/%Y'))
+            earliest_adm_date, earliest_visit_no = date_pairs[0]
+            last_dsch_date, last_visit_no = date_pairs[-1]
+
+            CODE = get_values_by_foreign_key(diagnoses_df, 'VISIT_NO', earliest_visit_no, 'CODE')
+            dsch_time = get_values_by_foreign_key(diagnoses_df, 'VISIT_NO', earliest_visit_no, 'CODE')
+            target_df.at[iter, 'UNSTABLE_ANGINA_FLAG'] = 1 if (set(CODE) & set(UNSTABLE_ANGINA_FLAG_CODE)) else 0
+            target_df.at[iter, 'STEMI_FLAG'] = 1 if 'I21.3' in CODE else 0
+            for co in CODE:
+                if co[:3] =='410' and co!='410.71':
+                    target_df.at[iter, 'STEMI_FLAG'] = 1
+            target_df.at[iter, 'NSTEMI_FLAG'] = 1 if set(CODE) & set(NSTEMI_FLAG_CODE) else 0
+
+            all_order_items = get_values_by_foreign_key(med_orders_df, 'VISIT_NO', last_visit_no, 'ITEM')
+            all_order_types = get_values_by_foreign_key(med_orders_df, 'VISIT_NO', last_visit_no, 'ORDER_TYPE')
+
+            for order_id, item in enumerate(all_order_items):
+                for name in DISCH_MED_BB_FLAG_PATTERN:
+                    if name in all_order_items[order_id]:
+                        target_df.at[iter, 'DISCH_MED_BB_FLAG'] = 1
+                        if all_order_types[order_id] == 'DISCHARGE PRESCRIPTION' or 'OUTPATIENT PRESCRIPTION':
+                            target_df.at[iter, 'DISCH_MED_BB_METHOD'] = 1
+                        elif all_order_types[order_id] == 'INPATIENT MEDICATION' or 'FACILITY-ADMINISTERED MEDICATION':
+                            target_df.at[iter, 'DISCH_MED_BB_METHOD'] = 2
+                        elif all_order_types[order_id] == 'HISTORICAL MEDICATION':
+                            target_df.at[iter, 'DISCH_MED_BB_METHOD'] = 3
+
+                for name in DISCH_MED_ANTIDEP_FLAG_PATTERN:
+                    if name in all_order_items[order_id]:
+                        target_df.at[iter, 'DISCH_MED_ANTIDEP_FLAG'] = 1
+                        if all_order_types[order_id] == 'DISCHARGE PRESCRIPTION' or 'OUTPATIENT PRESCRIPTION':
+                            target_df.at[iter, 'DISCH_MED_ANTIDEP_METHOD'] = 1
+                        elif all_order_types[order_id] == 'INPATIENT MEDICATION' or 'FACILITY-ADMINISTERED MEDICATION':
+                            target_df.at[iter, 'DISCH_MED_ANTIDEP_METHOD'] = 2
+                        elif all_order_types[order_id] == 'HISTORICAL MEDICATION':
+                            target_df.at[iter, 'DISCH_MED_ANTIDEP_METHOD'] = 3
+                for name in DISCH_MED_ACE_ARB_FLAG_PATTERN:
+                    if name in all_order_items[order_id]:
+                        target_df.at[iter, 'DISCH_MED_ACE_ARB_FLAG'] = 1
+                        if all_order_types[order_id] == 'DISCHARGE PRESCRIPTION' or 'OUTPATIENT PRESCRIPTION':
+                            target_df.at[iter, 'DISCH_MED_ACE_ARB_METHOD'] = 1
+                        elif all_order_types[order_id] == 'INPATIENT MEDICATION' or 'FACILITY-ADMINISTERED MEDICATION':
+                            target_df.at[iter, 'DISCH_MED_ACE_ARB_METHOD'] = 2
+                        elif all_order_types[order_id] == 'HISTORICAL MEDICATION':
+                            target_df.at[iter, 'DISCH_MED_ACE_ARB_METHOD'] = 3
+                for name in DISCH_MED_ASPIRIN_FLAG_PATTERN:
+                    if name in all_order_items[order_id]:
+                        target_df.at[iter, 'DISCH_MED_ASPIRIN_FLAG'] = 1
+                        if all_order_types[order_id] == 'DISCHARGE PRESCRIPTION' or 'OUTPATIENT PRESCRIPTION':
+                            target_df.at[iter, 'DISCH_MED_ASPIRIN_METHOD'] = 1
+                        elif all_order_types[order_id] == 'INPATIENT MEDICATION' or 'FACILITY-ADMINISTERED MEDICATION':
+                            target_df.at[iter, 'DISCH_MED_ASPIRIN_METHOD'] = 2
+                        elif all_order_types[order_id] == 'HISTORICAL MEDICATION':
+                            target_df.at[iter, 'DISCH_MED_ASPIRIN_METHOD'] = 3
+
+
+    return target_df
+
+def DEMOGRAPHICS_ADDITIONS(target_df, visit_df, diagnoses_df):
     '''
     Get demographics and additional information
     :param target_df:
@@ -825,7 +1040,7 @@ def DEMOGRAPHICS_ADDITIONS(target_df):
     # initialize table columns with default values
     target_df['AGE_AT_ADMIT'] = ['NA'] * len(target_df)
     target_df['INDEX_ADMISSION_FLAG'] = [1] * len(target_df)
-    target_df['DISCHARGE_LOCATION'] = [0] * len(target_df)
+    target_df['DISCHARGE_LOCATION'] = ['NA'] * len(target_df)
     target_df['TRANSFER_AT_DISCHARGE_FLAG'] = [0] * len(target_df)
     target_df['REHAB_FLAG'] = [0] * len(target_df)
 
@@ -834,6 +1049,31 @@ def DEMOGRAPHICS_ADDITIONS(target_df):
             target_df.at[iter, 'AGE_AT_ADMIT'] = get_date_diff(row['ADMIT_DATE'], row['DOB'])/365 + 1
         except:
             pass
+
+        pat_id = row['PERSON_ID']
+        # get the patients all visit rows
+        all_visits_df = diagnoses_df[diagnoses_df['PAT_ID'] == pat_id]
+        ACUTE_MYOCARDIAL_INFARCTION_df = all_visits_df[all_visits_df['CODE'].isin(ACUTE_MYOCARDIAL_INFARCTION_CODE)]
+        all_visit_no = list(ACUTE_MYOCARDIAL_INFARCTION_df['VISIT_NO'].values)
+        all_adm_dates = [get_one_value_by_foreign_key(visit_df, 'VISIT_NO', vn ,'ADM_DATE') for vn in all_visit_no]
+        all_dsch_dates = [get_one_value_by_foreign_key(visit_df, 'VISIT_NO', vn ,'DSCH_DATE') for vn in all_visit_no]
+        assert len(all_dsch_dates) == len(all_adm_dates)
+        for visit_serial in range(len(all_dsch_dates)):
+            if all_dsch_dates[visit_serial] == '':
+                all_dsch_dates[visit_serial] = all_adm_dates[visit_serial]
+
+        # get the earlist adm and visit_nod
+        if len(all_dsch_dates) > 0:
+            date_pairs = list(zip(all_dsch_dates, all_visit_no))
+            try:
+                date_pairs.sort(key=lambda x: time.strptime(x[0], '%m/%d/%Y'))
+            except:
+                pass
+            earliest_adm_date, earliest_visit_no = date_pairs[-1]
+            last_dsch_date, last_dsch_no = date_pairs[-1]
+
+            target_df.at[iter, 'DISCHARGE_LOCATION'] = get_one_value_by_foreign_key(visit_df, 'DSCH_DATE', last_dsch_date, 'VISIT_TYPE')
+            target_df.at[iter, 'REHAB_FLAG'] = 1 if get_one_value_by_foreign_key(diagnoses_df, 'VISIT_NO', earliest_visit_no, 'CODE') in REHAB_FLAG_CODE else 0
 
     return target_df
 
@@ -873,22 +1113,103 @@ def PATIENT_HISTORY(target_df, diagnoses_df, visits_df):
             chest_pain_dates = []
             for name in CHEST_PAIN_NAMES:
                 try: # if chest_pain_date is not empty
-                    chest_pain_dates += get_values_by_foreign_key(diagnoses_df, 'CODE_DESC', name, 'ADM_DATE')
+                    chest_pain_dates += get_values_by_foreign_key(all_diagnoses_df, 'CODE_DESC', name, 'ADM_DATE')
                 except:
-                    chest_pain_dates = get_values_by_foreign_key(diagnoses_df, 'CODE_DESC', name, 'ADM_DATE')
-
+                    chest_pain_dates = get_values_by_foreign_key(all_diagnoses_df, 'CODE_DESC', name, 'ADM_DATE')
             for date in chest_pain_dates:
                 if get_date_diff(earliest_adm_date, date) > 0:
                     target_df.at[iter, 'HISTORY_CHEST_PAIN_FLAG'] = 1
+
+            # compute History_AMI_Flag
+            AMI_dates = []
+            for code in AMI_FLAG_CODE:
+                try: # if AMI_dates is not empty
+                    AMI_dates += get_values_by_foreign_key(all_diagnoses_df, 'CODE', code, 'ADM_DATE')
+                except:
+                    AMI_dates = get_values_by_foreign_key(all_diagnoses_df, 'CODE', code, 'ADM_DATE')
+            for date in AMI_dates:
+                if get_date_diff(earliest_adm_date, date) > 0:
+                    target_df.at[iter, 'HISTORY_AMI_FLAG'] = 1
+
+            CABG_dates = []
+            for code in CABG_FLAG_CODE:
+                try:  # if AMI_dates is not empty
+                    CABG_dates += get_values_by_foreign_key(all_diagnoses_df, 'CODE', code, 'ADM_DATE')
+                except:
+                    CABG_dates = get_values_by_foreign_key(all_diagnoses_df, 'CODE', code, 'ADM_DATE')
+            for date in CABG_dates:
+                if get_date_diff(earliest_adm_date, date) > 0:
+                    target_df.at[iter, 'HISTORY_CABG_FLAG'] = 1
+
+            PCI_dates = []
+            for code in PCI_FLAG_CODE:
+                try:  # if AMI_dates is not empty
+                    PCI_dates += get_values_by_foreign_key(all_diagnoses_df, 'CODE', code, 'ADM_DATE')
+                except:
+                    PCI_dates = get_values_by_foreign_key(all_diagnoses_df, 'CODE', code, 'ADM_DATE')
+            for date in PCI_dates:
+                if get_date_diff(earliest_adm_date, date) > 0:
+                    target_df.at[iter, 'HISTORY_PCI_FLAG'] = 1
+
+            PVD_dates = []
+            for code in PVD_FLAG_CODE:
+                try:  # if AMI_dates is not empty
+                    PVD_dates += get_values_by_foreign_key(all_diagnoses_df, 'CODE', code, 'ADM_DATE')
+                except:
+                    PVD_dates = get_values_by_foreign_key(all_diagnoses_df, 'CODE', code, 'ADM_DATE')
+            for date in PVD_dates:
+                if get_date_diff(earliest_adm_date, date) > 0:
+                    target_df.at[iter, 'HISTORY_PVD_FLAG'] = 1
+
+            ANGINA_dates = []
+            for code in ANGINA_FLAG_CODE:
+                try:  # if AMI_dates is not empty
+                    ANGINA_dates += get_values_by_foreign_key(all_diagnoses_df, 'CODE', code, 'ADM_DATE')
+                except:
+                    ANGINA_dates = get_values_by_foreign_key(all_diagnoses_df, 'CODE', code, 'ADM_DATE')
+            for date in ANGINA_dates:
+                if get_date_diff(earliest_adm_date, date) > 0:
+                    target_df.at[iter, 'HISTORY_ANGINA_FLAG'] = 1
+
+
+            UNSTABLE_ANGINA_dates = []
+            for code in UNSTABLE_ANGINA_FLAG_CODE:
+                try:  # if AMI_dates is not empty
+                    UNSTABLE_ANGINA_dates += get_values_by_foreign_key(all_diagnoses_df, 'CODE', code, 'ADM_DATE')
+                except:
+                    UNSTABLE_ANGINA_dates = get_values_by_foreign_key(all_diagnoses_df, 'CODE', code, 'ADM_DATE')
+            for date in UNSTABLE_ANGINA_dates:
+                if get_date_diff(earliest_adm_date, date) > 0:
+                    target_df.at[iter, 'HISTORY_UNSTABLE_ANGINA_FLAG'] = 1
+
+            HYPERTENSION_dates = []
+            for code in HYPERTENSION_FLAG_CODE:
+                try:  # if AMI_dates is not empty
+                    HYPERTENSION_dates += get_values_by_foreign_key(all_diagnoses_df, 'CODE', code, 'ADM_DATE')
+                except:
+                    HYPERTENSION_dates = get_values_by_foreign_key(all_diagnoses_df, 'CODE', code, 'ADM_DATE')
+            for date in HYPERTENSION_dates:
+                if get_date_diff(earliest_adm_date, date) > 0:
+                    target_df.at[iter, 'HISTORY_HYPERTENSION_FLAG'] = 1
+
+            DEPRESSION_dates = []
+            for code in DEPRESSION_FLAG_CODE:
+                try:  # if AMI_dates is not empty
+                    DEPRESSION_dates += get_values_by_foreign_key(all_diagnoses_df, 'CODE', code, 'ADM_DATE')
+                except:
+                    DEPRESSION_dates = get_values_by_foreign_key(all_diagnoses_df, 'CODE', code, 'ADM_DATE')
+            for date in DEPRESSION_dates:
+                if get_date_diff(earliest_adm_date, date) > 0:
+                    target_df.at[iter, 'HISTORY_DEPRESSION_FLAG'] = 1
+                    target_df.at[iter, 'MAJOR_DEPRESSION_COUNT'] += 1
 
             # compute Family_Depression_Flag
             family_depression_dates = []
             for code in FAMILY_DEPRESSION_CODE:
                 try:  # if family_depression_dates is not empty
-                    family_depression_dates += get_values_by_foreign_key(diagnoses_df, 'CODE', code, 'ADM_DATE')
+                    family_depression_dates += get_values_by_foreign_key(all_diagnoses_df, 'CODE', code, 'ADM_DATE')
                 except:
-                    family_depression_dates = get_values_by_foreign_key(diagnoses_df, 'CODE', code, 'ADM_DATE')
-
+                    family_depression_dates = get_values_by_foreign_key(all_diagnoses_df, 'CODE', code, 'ADM_DATE')
             for date in family_depression_dates:
                 if get_date_diff(earliest_adm_date, date) > 0:
                     target_df.at[iter, 'FAMILY_DEPRESSION_FLAG'] = 1
@@ -923,6 +1244,16 @@ def IN_HOSPITAL_OUTCOMES(target_df, diagnoses_df, procedures_df):
             # get ECHOCARDIOGRAPHY_FLAG
             procedure_codes = get_values_by_foreign_key(procedures_df, 'VISIT_NO', earliest_visit_no,'CODE_DESC')
             target_df.at[iter, 'ECHOCARDIOGRAPHY_FLAG'] = 1 if set(procedure_codes) & set(ECHOCARDIOGRAPHY_CODE) else 0
+
+            diagnoses_codes = get_values_by_foreign_key(all_diagnoses_df, 'VISIT_NO', earliest_visit_no,'CODE')
+            target_df.at[iter, 'IN_HOSPITAL_HF_FLAG'] = 1 if set(diagnoses_codes) & set(IN_HOSPITAL_HF_CODE) else 0
+            target_df.at[iter, 'IN_HOSPITAL_ISCHEMIA_FLAG'] = 1 if set(diagnoses_codes) & set(IN_HOSPITAL_ISCHEMIA_CODE) else 0
+
+            for pattern in CARDIAC_PROCEDURE_FLAG_PATTERN:
+                matcher = re.compile(pattern)
+                for code in procedure_codes:
+                    if matcher.match(code):
+                        target_df.at[iter, 'CARDIAC_PROCEDURE_FLAG'] = 1
 
     return target_df
 
@@ -977,6 +1308,329 @@ def COMORBIDITIES(target_df):
             date_pairs.sort(key=lambda x: time.strptime(x[0], '%m/%d/%Y'))
             earliest_adm_date, earliest_visit_no = date_pairs[0]
 
+            diagnoses_codes = get_values_by_foreign_key(all_diagnoses_df, 'VISIT_NO', earliest_visit_no, 'CODE')
+
+            COMORBID_ARRHYTHMIA_FLAG_dates = []
+            COMORBID_ARRHYTHMIA_FLAG_CODE = []
+            for pattern in COMORBID_ARRHYTHMIA_PATTERN:
+                matcher = re.compile(pattern)
+                for code in diagnoses_codes:
+                    if matcher.match(code):
+                        COMORBID_ARRHYTHMIA_FLAG_CODE.append(code)
+            for code in COMORBID_ARRHYTHMIA_FLAG_CODE:
+                try:  # if chest_pain_date is not empty
+                    COMORBID_ARRHYTHMIA_FLAG_dates += get_values_by_foreign_key(all_diagnoses_df, 'CODE', code, 'ADM_DATE')
+                except:
+                    COMORBID_ARRHYTHMIA_FLAG_dates = get_values_by_foreign_key(all_diagnoses_df, 'CODE', code, 'ADM_DATE')
+            for date in COMORBID_ARRHYTHMIA_FLAG_dates:
+                if get_date_diff(earliest_adm_date, date) > 0:
+                    target_df.at[iter, 'COMORBID_ARRHYTHMIA_FLAG'] = 1
+
+            COMORBID_ANEMIA_FLAG_dates = []
+            COMORBID_ANEMIA_FLAG_CODE = []
+            for pattern in COMORBID_ANEMIA_PATTERN:
+                matcher = re.compile(pattern)
+                for code in diagnoses_codes:
+                    if matcher.match(code):
+                        COMORBID_ANEMIA_FLAG_CODE.append(code)
+            for code in COMORBID_ANEMIA_FLAG_CODE:
+                try:  # if chest_pain_date is not empty
+                    COMORBID_ANEMIA_FLAG_dates += get_values_by_foreign_key(all_diagnoses_df, 'CODE', code, 'ADM_DATE')
+                except:
+                    COMORBID_ANEMIA_FLAG_dates = get_values_by_foreign_key(all_diagnoses_df, 'CODE', code, 'ADM_DATE')
+            for date in COMORBID_ANEMIA_FLAG_dates:
+                if get_date_diff(earliest_adm_date, date) > 0:
+                    target_df.at[iter, 'COMORBID_ANEMIA_FLAG'] = 1
+
+
+            COMORBID_HYPERTENSION_FLAG_dates = []
+            COMORBID_HYPERTENSION_FLAG_CODE = []
+            for pattern in COMORBID_HYPERTENSION_PATTERN:
+                matcher = re.compile(pattern)
+                for code in diagnoses_codes:
+                    if matcher.match(code):
+                        COMORBID_HYPERTENSION_FLAG_CODE.append(code)
+            for code in COMORBID_HYPERTENSION_FLAG_CODE:
+                try:  # if chest_pain_date is not empty
+                    COMORBID_HYPERTENSION_FLAG_dates += get_values_by_foreign_key(all_diagnoses_df, 'CODE', code, 'ADM_DATE')
+                except:
+                    COMORBID_HYPERTENSION_FLAG_dates = get_values_by_foreign_key(all_diagnoses_df, 'CODE', code, 'ADM_DATE')
+            for date in COMORBID_HYPERTENSION_FLAG_dates:
+                if get_date_diff(earliest_adm_date, date) > 0:
+                    target_df.at[iter, 'COMORBID_HYPERTENSION_FLAG'] = 1
+
+            COMORBID_COPD_FLAG_dates = []
+            COMORBID_COPD_FLAG_CODE = []
+            for pattern in COMORBID_COPD_PATTERN:
+                matcher = re.compile(pattern)
+                for code in diagnoses_codes:
+                    if matcher.match(code):
+                        COMORBID_COPD_FLAG_CODE.append(code)
+            for code in COMORBID_COPD_FLAG_CODE:
+                try:  # if chest_pain_date is not empty
+                    COMORBID_COPD_FLAG_dates += get_values_by_foreign_key(all_diagnoses_df, 'CODE', code, 'ADM_DATE')
+                except:
+                    COMORBID_COPD_FLAG_dates = get_values_by_foreign_key(all_diagnoses_df, 'CODE', code, 'ADM_DATE')
+            for date in COMORBID_COPD_FLAG_dates:
+                if get_date_diff(earliest_adm_date, date) > 0:
+                    target_df.at[iter, 'COMORBID_COPD_FLAG'] = 1
+                    target_df.at[iter, 'COMORBID_CHRONIC_PULMONARY_DISEASE_FLAG'] = 1
+
+
+            COMORBID_CKD_FLAG_dates = []
+            COMORBID_CKD_FLAG_CODE = []
+            for pattern in COMORBID_CKD_PATTERN:
+                matcher = re.compile(pattern)
+                for code in diagnoses_codes:
+                    if matcher.match(code):
+                        COMORBID_CKD_FLAG_CODE.append(code)
+            for code in COMORBID_CKD_FLAG_CODE:
+                try:  # if chest_pain_date is not empty
+                    COMORBID_CKD_FLAG_dates += get_values_by_foreign_key(all_diagnoses_df, 'CODE', code, 'ADM_DATE')
+                except:
+                    COMORBID_CKD_FLAG_dates = get_values_by_foreign_key(all_diagnoses_df, 'CODE', code, 'ADM_DATE')
+            for date in COMORBID_CKD_FLAG_dates:
+                if get_date_diff(earliest_adm_date, date) > 0:
+                    target_df.at[iter, 'COMORBID_CKD_FLAG'] = 1
+
+
+            COMORBID_STROKE_FLAG_dates = []
+            COMORBID_STROKE_FLAG_CODE = []
+            for pattern in COMORBID_STROKE_PATTERN:
+                matcher = re.compile(pattern)
+                for code in diagnoses_codes:
+                    if matcher.match(code):
+                        COMORBID_STROKE_FLAG_CODE.append(code)
+            for code in COMORBID_STROKE_FLAG_CODE:
+                try:  # if chest_pain_date is not empty
+                    COMORBID_STROKE_FLAG_dates += get_values_by_foreign_key(all_diagnoses_df, 'CODE', code, 'ADM_DATE')
+                except:
+                    COMORBID_STROKE_FLAG_dates = get_values_by_foreign_key(all_diagnoses_df, 'CODE', code, 'ADM_DATE')
+            for date in COMORBID_STROKE_FLAG_dates:
+                if get_date_diff(earliest_adm_date, date) > 0:
+                    target_df.at[iter, 'COMORBID_STROKE_FLAG'] = 1
+                    target_df.at[iter, 'COMORBID_CEREBROVASCULAR_DISEASE_FLAG'] = 1
+
+            COMORBID_TOBACCO_USE_FLAG_dates = []
+            for code in COMORBID_TOBACCO_USE_CODE:
+                try:  # if chest_pain_date is not empty
+                    COMORBID_TOBACCO_USE_FLAG_dates += get_values_by_foreign_key(all_diagnoses_df, 'CODE', code, 'ADM_DATE')
+                except:
+                    COMORBID_TOBACCO_USE_FLAG_dates = get_values_by_foreign_key(all_diagnoses_df, 'CODE', code, 'ADM_DATE')
+            for date in COMORBID_TOBACCO_USE_FLAG_dates:
+                if get_date_diff(earliest_adm_date, date) > 0:
+                    target_df.at[iter, 'COMORBID_TOBACCO_USE_FLAG'] = 1
+
+            COMORBID_DEPRESSION_FLAG_dates = []
+            for code in COMORBID_DEPRESSION_CODE:
+                try:  # if chest_pain_date is not empty
+                    COMORBID_DEPRESSION_FLAG_dates += get_values_by_foreign_key(all_diagnoses_df, 'CODE', code,'ADM_DATE')
+                except:
+                    COMORBID_DEPRESSION_FLAG_dates = get_values_by_foreign_key(all_diagnoses_df, 'CODE', code,'ADM_DATE')
+            for date in COMORBID_DEPRESSION_FLAG_dates:
+                if get_date_diff(earliest_adm_date, date) > 0:
+                    target_df.at[iter, 'COMORBID_DEPRESSION_FLAG'] = 1
+
+            COMORBID_HYPERCHOLESTEROLEMIA_FLAG_dates = []
+            COMORBID_HYPERCHOLESTEROLEMIA_FLAG_CODE = []
+            for pattern in COMORBID_HYPERCHOLESTEROLEMIA_PATTERN:
+                matcher = re.compile(pattern)
+                for code in diagnoses_codes:
+                    if matcher.match(code):
+                        COMORBID_HYPERCHOLESTEROLEMIA_FLAG_CODE.append(code)
+            for code in COMORBID_HYPERCHOLESTEROLEMIA_FLAG_CODE:
+                try:  # if chest_pain_date is not empty
+                    COMORBID_HYPERCHOLESTEROLEMIA_FLAG_dates += get_values_by_foreign_key(all_diagnoses_df, 'CODE', code, 'ADM_DATE')
+                except:
+                    COMORBID_HYPERCHOLESTEROLEMIA_FLAG_dates = get_values_by_foreign_key(all_diagnoses_df, 'CODE', code, 'ADM_DATE')
+            for date in COMORBID_HYPERCHOLESTEROLEMIA_FLAG_dates:
+                if get_date_diff(earliest_adm_date, date) > 0:
+                    target_df.at[iter, 'COMORBID_HYPERCHOLESTEROLEMIA_FLAG'] = 1
+
+
+            COMORBID_CAD_FLAG_dates = []
+            COMORBID_CAD_FLAG_CODE = []
+            for pattern in COMORBID_CAD_PATTERN:
+                matcher = re.compile(pattern)
+                for code in diagnoses_codes:
+                    if matcher.match(code):
+                        COMORBID_CAD_FLAG_CODE.append(code)
+            for code in COMORBID_CAD_FLAG_CODE:
+                try:  # if chest_pain_date is not empty
+                    COMORBID_CAD_FLAG_dates += get_values_by_foreign_key(all_diagnoses_df, 'CODE', code, 'ADM_DATE')
+                except:
+                    COMORBID_CAD_FLAG_dates = get_values_by_foreign_key(all_diagnoses_df, 'CODE', code, 'ADM_DATE')
+            for date in COMORBID_CAD_FLAG_dates:
+                if get_date_diff(earliest_adm_date, date) > 0:
+                    target_df.at[iter, 'COMORBID_CAD_FLAG'] = 1
+                    target_df.at[iter, 'COMORBID_MI_FLAG'] = 1
+
+            PRIOR_REVASCULARIZATION_FLAG_dates = []
+            PRIOR_REVASCULARIZATION_FLAG_CODE = []
+            for pattern in PRIOR_REVASCULARIZATION_PATTERN:
+                matcher = re.compile(pattern)
+                for code in diagnoses_codes:
+                    if matcher.match(code):
+                        PRIOR_REVASCULARIZATION_FLAG_CODE.append(code)
+            for code in PRIOR_REVASCULARIZATION_FLAG_CODE:
+                try:  # if chest_pain_date is not empty
+                    PRIOR_REVASCULARIZATION_FLAG_dates += get_values_by_foreign_key(all_diagnoses_df, 'CODE', code, 'ADM_DATE')
+                except:
+                    PRIOR_REVASCULARIZATION_FLAG_dates = get_values_by_foreign_key(all_diagnoses_df, 'CODE', code, 'ADM_DATE')
+            for date in PRIOR_REVASCULARIZATION_FLAG_dates:
+                if get_date_diff(earliest_adm_date, date) > 0:
+                    target_df.at[iter, 'PRIOR_REVASCULARIZATION_FLAG'] = 1
+
+            COMORBID_DIABETES_CC_FLAG_dates = []
+            COMORBID_DIABETES_CC_FLAG_CODE = []
+            for pattern in COMORBID_DIABETES_CC_PATTERN:
+                matcher = re.compile(pattern)
+                for code in diagnoses_codes:
+                    if matcher.match(code):
+                        COMORBID_DIABETES_CC_FLAG_CODE.append(code)
+            for code in COMORBID_DIABETES_CC_FLAG_CODE:
+                try:  # if chest_pain_date is not empty
+                    COMORBID_DIABETES_CC_FLAG_dates += get_values_by_foreign_key(all_diagnoses_df, 'CODE', code, 'ADM_DATE')
+                except:
+                    COMORBID_DIABETES_CC_FLAG_dates = get_values_by_foreign_key(all_diagnoses_df, 'CODE', code, 'ADM_DATE')
+            for date in COMORBID_DIABETES_CC_FLAG_dates:
+                if get_date_diff(earliest_adm_date, date) > 0:
+                    target_df.at[iter, 'COMORBID_DIABETES_CC_FLAG'] = 1
+                    target_df.at[iter, 'COMORBID_DIABETES_FLAG'] = 1
+
+            COMORBID_CHF_FLAG_dates = []
+            for code in COMORBID_CHF_CODE:
+                try:  # if chest_pain_date is not empty
+                    COMORBID_CHF_FLAG_dates += get_values_by_foreign_key(all_diagnoses_df, 'CODE', code,'ADM_DATE')
+                except:
+                    COMORBID_CHF_FLAG_dates = get_values_by_foreign_key(all_diagnoses_df, 'CODE', code,'ADM_DATE')
+            for date in COMORBID_CHF_FLAG_dates:
+                if get_date_diff(earliest_adm_date, date) > 0:
+                    target_df.at[iter, 'COMORBID_CHF_FLAG'] = 1
+
+            COMORBID_PERIPHERAL_VASCULAR_DISEASE_FLAG_dates = []
+            for code in COMORBID_PERIPHERAL_VASCULAR_DISEASE_CODE:
+                try:  # if chest_pain_date is not empty
+                    COMORBID_PERIPHERAL_VASCULAR_DISEASE_FLAG_dates += get_values_by_foreign_key(all_diagnoses_df, 'CODE', code, 'ADM_DATE')
+                except:
+                    COMORBID_PERIPHERAL_VASCULAR_DISEASE_FLAG_dates = get_values_by_foreign_key(all_diagnoses_df, 'CODE', code, 'ADM_DATE')
+            for date in COMORBID_PERIPHERAL_VASCULAR_DISEASE_FLAG_dates:
+                if get_date_diff(earliest_adm_date, date) > 0:
+                    target_df.at[iter, 'COMORBID_PERIPHERAL_VASCULAR_DISEASE_FLAG'] = 1
+
+            COMORBID_DEMENTIA_FLAG_dates = []
+            COMORBID_DEMENTIA_FLAG_CODE = []
+            for pattern in COMORBID_DEMENTIA_PATTERN:
+                matcher = re.compile(pattern)
+                for code in diagnoses_codes:
+                    if matcher.match(code):
+                        COMORBID_DEMENTIA_FLAG_CODE.append(code)
+            for code in COMORBID_DEMENTIA_FLAG_CODE:
+                try:  # if chest_pain_date is not empty
+                    COMORBID_DEMENTIA_FLAG_dates += get_values_by_foreign_key(all_diagnoses_df, 'CODE', code,'ADM_DATE')
+                except:
+                    COMORBID_DEMENTIA_FLAG_dates = get_values_by_foreign_key(all_diagnoses_df, 'CODE', code,'ADM_DATE')
+            for date in COMORBID_DEMENTIA_FLAG_dates:
+                if get_date_diff(earliest_adm_date, date) > 0:
+                    target_df.at[iter, 'COMORBID_DEMENTIA_FLAG'] = 1
+
+            COMORBID_RHEUMATOLOGIC_DISEASE_FLAG_dates = []
+            COMORBID_RHEUMATOLOGIC_DISEASE_FLAG_CODE = []
+            for pattern in COMORBID_RHEUMATOLOGIC_DISEASE_PATTERN:
+                matcher = re.compile(pattern)
+                for code in diagnoses_codes:
+                    if matcher.match(code):
+                        COMORBID_RHEUMATOLOGIC_DISEASE_FLAG_CODE.append(code)
+            for code in COMORBID_RHEUMATOLOGIC_DISEASE_FLAG_CODE:
+                try:  # if chest_pain_date is not empty
+                    COMORBID_RHEUMATOLOGIC_DISEASE_FLAG_dates += get_values_by_foreign_key(all_diagnoses_df, 'CODE', code,'ADM_DATE')
+                except:
+                    COMORBID_RHEUMATOLOGIC_DISEASE_FLAG_dates = get_values_by_foreign_key(all_diagnoses_df, 'CODE', code, 'ADM_DATE')
+            for date in COMORBID_RHEUMATOLOGIC_DISEASE_FLAG_dates:
+                if get_date_diff(earliest_adm_date, date) > 0:
+                    target_df.at[iter, 'COMORBID_RHEUMATOLOGIC_DISEASE_FLAG'] = 1
+
+            COMORBID_PEPTIC_ULCER_DISEASE_FLAG_dates = []
+            COMORBID_PEPTIC_ULCER_DISEASE_FLAG_CODE = []
+            for pattern in COMORBID_PEPTIC_ULCER_DISEASE_PATTERN:
+                matcher = re.compile(pattern)
+                for code in diagnoses_codes:
+                    if matcher.match(code):
+                        COMORBID_PEPTIC_ULCER_DISEASE_FLAG_CODE.append(code)
+            for code in COMORBID_PEPTIC_ULCER_DISEASE_FLAG_CODE:
+                try:  # if chest_pain_date is not empty
+                    COMORBID_PEPTIC_ULCER_DISEASE_FLAG_dates += get_values_by_foreign_key(all_diagnoses_df, 'CODE',code, 'ADM_DATE')
+                except:
+                    COMORBID_PEPTIC_ULCER_DISEASE_FLAG_dates = get_values_by_foreign_key(all_diagnoses_df, 'CODE',code, 'ADM_DATE')
+            for date in COMORBID_PEPTIC_ULCER_DISEASE_FLAG_dates:
+                if get_date_diff(earliest_adm_date, date) > 0:
+                    target_df.at[iter, 'COMORBID_PEPTIC_ULCER_DISEASE_FLAG'] = 1
+
+            COMORBID_MILD_LIVER_DISEASE_FLAG_dates = []
+            COMORBID_MILD_LIVER_DISEASE_FLAG_CODE = []
+            for pattern in COMORBID_MILD_LIVER_DISEASE_PATTERN:
+                matcher = re.compile(pattern)
+                for code in diagnoses_codes:
+                    if matcher.match(code):
+                        COMORBID_MILD_LIVER_DISEASE_FLAG_CODE.append(code)
+            for code in COMORBID_MILD_LIVER_DISEASE_FLAG_CODE:
+                try:  # if chest_pain_date is not empty
+                    COMORBID_MILD_LIVER_DISEASE_FLAG_dates += get_values_by_foreign_key(all_diagnoses_df, 'CODE',code, 'ADM_DATE')
+                except:
+                    COMORBID_MILD_LIVER_DISEASE_FLAG_dates = get_values_by_foreign_key(all_diagnoses_df, 'CODE', code,'ADM_DATE')
+            for date in COMORBID_MILD_LIVER_DISEASE_FLAG_dates:
+                if get_date_diff(earliest_adm_date, date) > 0:
+                    target_df.at[iter, 'COMORBID_MILD_LIVER_DISEASE_FLAG'] = 1
+                    target_df.at[iter, 'COMORBID_MODERATE_OR_SEVERE_LIVER_DISEASE_FLAG'] = 1
+
+            COMORBID_HEMIPLEGIA_OR_PARAPLEGIA_FLAG_dates = []
+            COMORBID_HEMIPLEGIA_OR_PARAPLEGIA_FLAG_CODE = []
+            for pattern in COMORBID_HEMIPLEGIA_OR_PARAPLEGIA_PATTERN:
+                matcher = re.compile(pattern)
+                for code in diagnoses_codes:
+                    if matcher.match(code):
+                        COMORBID_HEMIPLEGIA_OR_PARAPLEGIA_FLAG_CODE.append(code)
+            for code in COMORBID_HEMIPLEGIA_OR_PARAPLEGIA_FLAG_CODE:
+                try:  # if chest_pain_date is not empty
+                    COMORBID_HEMIPLEGIA_OR_PARAPLEGIA_FLAG_dates += get_values_by_foreign_key(all_diagnoses_df, 'CODE', code,'ADM_DATE')
+                except:
+                    COMORBID_HEMIPLEGIA_OR_PARAPLEGIA_FLAG_dates = get_values_by_foreign_key(all_diagnoses_df, 'CODE', code,'ADM_DATE')
+            for date in COMORBID_HEMIPLEGIA_OR_PARAPLEGIA_FLAG_dates:
+                if get_date_diff(earliest_adm_date, date) > 0:
+                    target_df.at[iter, 'COMORBID_HEMIPLEGIA_OR_PARAPLEGIA_FLAG'] = 1
+
+            COMORBID_RENAL_DISEASE_FLAG_dates = []
+            COMORBID_RENAL_DISEASE_FLAG_CODE = []
+            for pattern in COMORBID_RENAL_DISEASE_PATTERN:
+                matcher = re.compile(pattern)
+                for code in diagnoses_codes:
+                    if matcher.match(code):
+                        COMORBID_RENAL_DISEASE_FLAG_CODE.append(code)
+            for code in COMORBID_RENAL_DISEASE_FLAG_CODE:
+                try:  # if chest_pain_date is not empty
+                    COMORBID_RENAL_DISEASE_FLAG_dates += get_values_by_foreign_key(all_diagnoses_df, 'CODE',code, 'ADM_DATE')
+                except:
+                    COMORBID_RENAL_DISEASE_FLAG_dates = get_values_by_foreign_key(all_diagnoses_df, 'CODE',code, 'ADM_DATE')
+            for date in COMORBID_RENAL_DISEASE_FLAG_dates:
+                if get_date_diff(earliest_adm_date, date) > 0:
+                    target_df.at[iter, 'COMORBID_RENAL_DISEASE_FLAG'] = 1
+
+            COMORBID_AIDS_FLAG_dates = []
+            COMORBID_AIDS_FLAG_CODE = []
+            for pattern in COMORBID_AIDS_PATTERN:
+                matcher = re.compile(pattern)
+                for code in diagnoses_codes:
+                    if matcher.match(code):
+                        COMORBID_AIDS_FLAG_CODE.append(code)
+            for code in COMORBID_AIDS_FLAG_CODE:
+                try:  # if chest_pain_date is not empty
+                    COMORBID_AIDS_FLAG_dates += get_values_by_foreign_key(all_diagnoses_df, 'CODE', code,'ADM_DATE')
+                except:
+                    COMORBID_AIDS_FLAG_dates = get_values_by_foreign_key(all_diagnoses_df, 'CODE', code,'ADM_DATE')
+            for date in COMORBID_AIDS_FLAG_dates:
+                if get_date_diff(earliest_adm_date, date) > 0:
+                    target_df.at[iter, 'COMORBID_AIDS_FLAG'] = 1
+
 
     target_df['COMORBID_DIABETES_CC_FLAG_SCORE'] = target_df['COMORBID_DIABETES_CC_FLAG'] * 2
     target_df['COMORBID_DIABETES_FLAG_SCORE'] = target_df['COMORBID_DIABETES_FLAG']
@@ -985,13 +1639,13 @@ def COMORBIDITIES(target_df):
     target_df['COMORBID_PERIPHERAL_VASCULAR_DISEASE_FLAG_SCORE'] = target_df['COMORBID_PERIPHERAL_VASCULAR_DISEASE_FLAG']
     target_df['COMORBID_CEREBROVASCULAR_DISEASE_FLAG_SCORE'] = target_df['COMORBID_CEREBROVASCULAR_DISEASE_FLAG']
     target_df['COMORBID_DEMENTIA_FLAG_SCORE'] = target_df['COMORBID_DEMENTIA_FLAG']
-    target_df['COMORBID_CHRONIC_PULMONARY_DISEASE_FLAG_SCORE'] = target_df['COMORBID_CHRONIC_PULMONARY_FLAG']
+    target_df['COMORBID_CHRONIC_PULMONARY_DISEASE_FLAG_SCORE'] = target_df['COMORBID_CHRONIC_PULMONARY_DISEASE_FLAG']
     target_df['COMORBID_RHEUMATOLOGIC_DISEASE_FLAG_SCORE'] = target_df['COMORBID_RHEUMATOLOGIC_DISEASE_FLAG']
     target_df['COMORBID_PEPTIC_ULCER_DISEASE_FLAG_SCORE'] = target_df['COMORBID_PEPTIC_ULCER_DISEASE_FLAG']
     target_df['COMORBID_MILD_LIVER_DISEASE_FLAG_SCORE'] = target_df['COMORBID_MILD_LIVER_DISEASE_FLAG']
     target_df['COMORBID_HEMIPLEGIA_OR_PARAPLEGIA_FLAG_SCORE'] = target_df['COMORBID_HEMIPLEGIA_OR_PARAPLEGIA_FLAG'] * 2
     target_df['COMORBID_RENAL_DISEASE_FLAG_SCORE'] = target_df['COMORBID_RENAL_DISEASE_FLAG'] * 2
-    target_df['COMORBID_MODERATE_OR_SEVERE_LIVER_DISEASE_FLAG_SCORE'] = target_df['COMORBID_ MODERATE_OR_SEVERE_LIVER _DISEASE_FLAG'] * 3
+    target_df['COMORBID_MODERATE_OR_SEVERE_LIVER_DISEASE_FLAG_SCORE'] = target_df['COMORBID_MODERATE_OR_SEVERE_LIVER_DISEASE_FLAG'] * 3
     target_df['COMORBID_AIDS_FLAG_SCORE'] = target_df['COMORBID_AIDS_FLAG'] * 6
 
     target_df['CHARLSON_DEYO_SCORE'] = target_df['COMORBID_DIABETES_CC_FLAG_SCORE'] + \
@@ -1041,20 +1695,20 @@ def LACE_SCORE(target_df):
             date_pairs.sort(key=lambda x: time.strptime(x[0], '%m/%d/%Y'))
             earliest_adm_date, earliest_visit_no = date_pairs[0]
 
-        target_df.at[iter, 'LACE_ACUITY_SCORE'] = target_df.at[iter, 'NONELECTIVE_ADIMSSION_FLAG'] *3
+        target_df.at[iter, 'LACE_ACUITY_SCORE'] = target_df.at[iter, 'NONELECTIVE_ADMISSION_FLAG'] *3
 
         # compute Lace LOS SCORE
-        if 0 < target_df['LOS'] <= 1:
+        if 0 < target_df.at[iter,'LOS'] <= 1:
             target_df.at[iter, 'LACE_LOS_SCORE'] = 1
-        elif 1 < target_df['LOS'] <= 2:
+        elif 1 < target_df.at[iter,'LOS']<= 2:
             target_df.at[iter, 'LACE_LOS_SCORE'] = 2
-        elif 2 < target_df['LOS'] <= 3:
+        elif 2 < target_df.at[iter,'LOS'] <= 3:
             target_df.at[iter, 'LACE_LOS_SCORE'] = 3
-        elif 3 < target_df['LOS'] <= 6:
+        elif 3 < target_df.at[iter,'LOS'] <= 6:
             target_df.at[iter, 'LACE_LOS_SCORE'] = 4
-        elif 6 < target_df['LOS'] <= 13:
+        elif 6 < target_df.at[iter,'LOS'] <= 13:
             target_df.at[iter, 'LACE_LOS_SCORE'] = 5
-        elif 13 < target_df['LOS']:
+        elif 13 < target_df.at[iter,'LOS']:
             target_df.at[iter, 'LACE_LOS_SCORE'] = 7
 
         # compute LACE_CHARLSON_SCORE
@@ -1099,14 +1753,65 @@ def ENRICHD_SCORE(target_df, diagnoses_df):
             date_pairs.sort(key=lambda x: time.strptime(x[0], '%m/%d/%Y'))
             earliest_adm_date, earliest_visit_no = date_pairs[0]
 
-            diagnoses_code_desc = get_values_by_foreign_key(diagnoses_df, 'VISIT_NO', earliest_visit_no, 'CODE_DESC')
-            if set(diagnoses_code_desc) & set(CHF_CODE):
-                target_df.at[iter, 'KILLIP_CLASS'] = 'I'
+            KILLIP_CLASS_dates = []
+            for code in KILLIP_CLASS_CODE_I:
+                try:  # if chest_pain_date is not empty
+                    KILLIP_CLASS_dates += get_values_by_foreign_key(all_diagnoses_df, 'CODE', code, 'ADM_DATE')
+                except:
+                    KILLIP_CLASS_dates = get_values_by_foreign_key(all_diagnoses_df, 'CODE', code, 'ADM_DATE')
+            for date in KILLIP_CLASS_dates:
+                if get_date_diff(earliest_adm_date, date) > 0:
+                    target_df.at[iter, 'KILLIP_CLASS'] = 'I'
 
+            diagnoses_codes = get_values_by_foreign_key(all_diagnoses_df, 'VISIT_NO', earliest_visit_no, 'CODE')
+            if set(diagnoses_codes) & set(KILLIP_CLASS_CODE_II):
+                target_df.at[iter,'KILLIP_CLASS'] = 'II'
+            if set(diagnoses_codes) & set(KILLIP_CLASS_CODE_III):
+                target_df.at[iter,'KILLIP_CLASS'] = 'III'
+            if set(diagnoses_codes) & set(KILLIP_CLASS_CODE_IV):
+                target_df.at[iter,'KILLIP_CLASS'] = 'IV'
+
+            target_df.at[iter,'LVEF_FLAG'] = 1 if set(diagnoses_codes) & set(LVEF_CODE) else 0
+
+            post1,post2 = False, False
+            if set(diagnoses_codes) & set(POST_MI_CABG_FLAG_CODE1):
+                post1 = True
+            for pattern in POST_MI_CABG_FLAG_PATTERN2:
+                matcher = re.compile(pattern)
+                for code in diagnoses_codes:
+                    if matcher.match(code):
+                        post2 = True
+            target_df.at[iter,'POST_MI_CABG_FLAG'] = 1 if (post1 and post2) else 0
+
+            CHF_dates = []
+            for code in CHF_FLAG_CODE:
+                try:  # if chest_pain_date is not empty
+                    CHF_dates += get_values_by_foreign_key(all_diagnoses_df, 'CODE', code, 'ADM_DATE')
+                except:
+                    CHF_dates = get_values_by_foreign_key(all_diagnoses_df, 'CODE', code, 'ADM_DATE')
+            for date in CHF_dates:
+                if get_date_diff(earliest_adm_date, date) > 0:
+                    target_df.at[iter, 'CHF_FLAG'] = 1
+
+            HISTORY_STROKE_dates = []
+            HISTORY_STROKE_FLAG_CODE = []
+            for pattern in HISTORY_STROKE_FLAG_PATTERN:
+                matcher = re.compile(pattern)
+                for code in diagnoses_codes:
+                    if matcher.match(code):
+                        HISTORY_STROKE_FLAG_CODE.append(code)
+            for code in HISTORY_STROKE_FLAG_CODE:
+                try:  # if chest_pain_date is not empty
+                    HISTORY_STROKE_dates += get_values_by_foreign_key(all_diagnoses_df, 'CODE', code, 'ADM_DATE')
+                except:
+                    HISTORY_STROKE_dates = get_values_by_foreign_key(all_diagnoses_df, 'CODE', code, 'ADM_DATE')
+            for date in HISTORY_STROKE_dates:
+                if get_date_diff(earliest_adm_date, date) > 0:
+                    target_df.at[iter, 'HISTORY_STROKE_FLAG'] = 1
 
     return target_df
 
-def GRACE_SCORE(target_df):
+def GRACE_SCORE(target_df, labs_df):
     '''
     get grace score features
     :param target_df:
@@ -1114,9 +1819,9 @@ def GRACE_SCORE(target_df):
     '''
 
     target_df['IN_HOSPITAL_PCI_FLAG'] = ['NA'] * len(target_df)
-    target_df['SYSTOLIC_BP_AVG'] = [0] * len(target_df)
-    target_df['HEART_RATE_AVG'] = [0] * len(target_df)
-    target_df['ST_SEGMENT_AVG'] = [0] * len(target_df)
+    target_df['SYSTOLIC_BP_AVG'] = ['NA'] * len(target_df)
+    target_df['HEART_RATE_AVG'] = ['NA'] * len(target_df)
+    target_df['ST_SEGMENT_AVG'] = ['NA'] * len(target_df)
     target_df['TROPONIN_AVG'] = [0] * len(target_df)
     target_df['CARDIAC_MARKER_ELEVATION_FLAG'] = [0] * len(target_df)
     target_df['GRACE_SCORE_AGE'] = [0] * len(target_df)
@@ -1128,12 +1833,19 @@ def GRACE_SCORE(target_df):
     target_df['GRACE_SCORE_CARDIAC_ARREST'] = [0] * len(target_df)
     target_df['GRACE_SCORE_STEMI'] = [0] * len(target_df)
 
+    target_df['AKI_STAGE_VARIABLE'] = [0] * len(target_df)
+    target_df['AKI_FLAG'] = [0] * len(target_df)
+    target_df['AKI_STAGE_MAX'] = [0] * len(target_df)
+    target_df['AKI_STAGE_MIN'] = [0] * len(target_df)
+    target_df['AKI_RECOVERED_FLAG'] = [0] * len(target_df)
+    target_df['AKI_UNRESOLVED_FLAG'] = [0] * len(target_df)
+    target_df['AKI_DURATION'] = [0] * len(target_df)
+
     for iter, row in target_df.iterrows():
         pat_id = row['PERSON_ID']
         # get the patients all visit rows
         all_diagnoses_df = diagnoses_df[diagnoses_df['PAT_ID'] == pat_id]
-        ACUTE_MYOCARDIAL_INFARCTION_df = all_diagnoses_df[
-            all_diagnoses_df['CODE'].isin(ACUTE_MYOCARDIAL_INFARCTION_CODE)]
+        ACUTE_MYOCARDIAL_INFARCTION_df = all_diagnoses_df[all_diagnoses_df['CODE'].isin(ACUTE_MYOCARDIAL_INFARCTION_CODE)]
         all_adm_dates = list(ACUTE_MYOCARDIAL_INFARCTION_df['ADM_DATE'].values)
         all_visit_no = list(ACUTE_MYOCARDIAL_INFARCTION_df['VISIT_NO'].values)
 
@@ -1143,8 +1855,67 @@ def GRACE_SCORE(target_df):
             date_pairs.sort(key=lambda x: time.strptime(x[0], '%m/%d/%Y'))
             earliest_adm_date, earliest_visit_no = date_pairs[0]
 
-        # compute GRACE_SCORE_AGE
-        age =  target_df[iter, 'AGE_AT_ADMIT']
+            diagnoses_codes = get_values_by_foreign_key(all_diagnoses_df, 'VISIT_NO', earliest_visit_no,'CODE')
+            target_df.at[iter,'IN_HOSPITAL_PCI_FLAG'] = 1 if set(IN_HOSPITAL_PCI_CODE) & set(diagnoses_codes) else 0
+
+            adm_labs_df = labs_df[labs_df['VISIT_NO'] == earliest_visit_no]
+
+            # get all the sodium records
+            Troponin_df1 = adm_labs_df[adm_labs_df['ITEM'] == 'Troponin I']
+            Troponin_df2 = adm_labs_df[adm_labs_df['ITEM'] == 'Troponin-I']
+            Troponin_values = [try_float(x) for x in list(Troponin_df1['OBS_VALUE_NUM'].values)] + \
+                              [try_float(x) for x in list(Troponin_df2['OBS_VALUE_NUM'].values)]
+            if len(Troponin_values) > 0:
+                target_df.at[iter, 'TROPONIN_AVG'] = np.mean(Troponin_values)
+                target_df.at[iter, 'CARDIAC_MARKER_ELEVATION_FLAG'] = 1 if np.mean(Troponin_values) > 0.4 else 0
+
+            creatinine_df = adm_labs_df[adm_labs_df['ITEM'] == 'CREATININE']
+            all_time_labs_df = labs_df[labs_df['PAT_ID'] == pat_id]
+            anchor_creatinines = [try_float(x) for x in list(creatinine_df['OBS_VALUE'].values)]
+            anchor_dates = list(creatinine_df['OBS_DTM'].values)
+            baseline_creatinines = [try_float(x) for x in list(all_time_labs_df['OBS_VALUE'].values)]
+            baseline_dates = list(all_time_labs_df['OBS_DTM'].values)
+            for date_serial in range(len(anchor_dates)):
+                anchor_dates[date_serial] = anchor_dates[date_serial].split()[0]
+            for date_serial in range(len(baseline_dates)):
+                baseline_dates[date_serial] = baseline_dates[date_serial].split()[0]
+            anchor_pairs = list(zip(anchor_dates, anchor_creatinines))
+            baseline_pairs = list(zip(baseline_dates, baseline_creatinines))
+            if len(anchor_pairs) > 0 and len(baseline_pairs) > 0:
+                anchor_pairs.sort(key=lambda x: time.strptime(x[0], '%m/%d/%Y'))
+                last_anchor_date, last_anchor_creatinine = anchor_pairs[-1]
+                baseline_pairs.sort(key=lambda x: time.strptime(x[0], '%m/%d/%Y'))
+                last_baseline_date, last_baseline_creatinine = baseline_pairs[-1]
+                anchor_dates, anchor_creatinines = [ i for i, j in anchor_pairs ], [ j for i, j in anchor_pairs ]
+                baseline_dates, baseline_creatinines = [ i for i, j in baseline_pairs ], [ j for i, j in baseline_pairs ]
+
+                if last_anchor_creatinine/last_baseline_creatinine >= 1.5 or last_anchor_creatinine - last_baseline_creatinine >= 0.3:
+                    target_df.at[iter, 'AKI_STAGE_VARIABLE'] = 1
+                elif last_anchor_creatinine/last_baseline_creatinine >= 2.0:
+                    target_df.at[iter, 'AKI_STAGE_VARIABLE'] = 2
+                elif last_anchor_creatinine/last_baseline_creatinine >= 3.0:
+                    target_df.at[iter, 'AKI_STAGE_VARIABLE'] = 3
+
+                if target_df.at[iter, 'AKI_STAGE_VARIABLE'] > 0 :
+                    target_df.at[iter, 'AKI_UNRESOLVED_FLAG'] = 1
+
+                AKI_dates = []
+                for anchor_serial, anchor in enumerate(anchor_creatinines):
+                    if anchor/last_baseline_creatinine >= 1.5 or anchor - last_baseline_creatinine >= 0.3:
+                        target_df.at[iter, 'AKI_FLAG'] = 1
+                        if target_df.at[iter, 'AKI_STAGE_VARIABLE'] == 0:
+                            target_df.at[iter,'AKI_RECOVERED_FLAG'] = 1
+                        AKI_dates.append(anchor_dates[anchor_serial])
+
+                target_df.at[iter, 'AKI_STAGE_MAX'] = max([a/last_baseline_creatinine for a in anchor_creatinines])
+                target_df.at[iter, 'AKI_STAGE_MIN'] = min([a/last_baseline_creatinine for a in anchor_creatinines])
+
+                if len(AKI_dates) > 1:
+                    target_df.at[iter, 'AKI_DURATION'] = get_date_diff(AKI_dates[-1], AKI_dates[0])
+
+
+                # compute GRACE_SCORE_AGE
+        age = target_df.at[iter, 'AGE_AT_ADMIT']
         if 0 < age <= 30:
             target_df.at[iter, 'GRACE_SCORE_AGE'] = 0
         elif 30 < age <= 39:
@@ -1163,7 +1934,7 @@ def GRACE_SCORE(target_df):
             target_df.at[iter, 'GRACE_SCORE_AGE'] = 100
 
         # compute GRACE_SCORE_HEART_RATE
-        heart_rate = target_df.at[iter,'HEART_RATE_AVG']
+        heart_rate = try_float(target_df.at[iter,'HEART_RATE_AVG'])
         if heart_rate < 50:
             target_df.at[iter, 'GRACE_SCORE_HEART_RATE'] = 0
         elif 50 <= heart_rate < 70:
@@ -1180,7 +1951,7 @@ def GRACE_SCORE(target_df):
             target_df.at[iter, 'GRACE_SCORE_HEART_RATE'] = 46
 
         # compute GRACE_SCORE_SYSTOLIC_BP
-        systolic_bp_avg = target_df.at[iter, 'SYSTOLIC_BP_AVG']
+        systolic_bp_avg = try_float(target_df.at[iter, 'SYSTOLIC_BP_AVG'])
         if systolic_bp_avg < 80:
             target_df.at[iter, 'GRACE_SCORE_SYSTOLIC_BP'] = 0
         elif 80 <= systolic_bp_avg < 100:
@@ -1197,7 +1968,7 @@ def GRACE_SCORE(target_df):
             target_df.at[iter, 'GRACE_SCORE_SYSTOLIC_BP'] = 0
 
         # compute GRACE_SCORE_CREATININE_LEVEL_FIRST
-        c_level =  target_df.at[iter, 'CREATININE_LEVEL_FIRST']
+        c_level =  try_float(target_df.at[iter, 'CREATININE_LEVEL_FIRST'])
         if 0 < c_level < 0.4:
             target_df.at[iter, 'GRACE_SCORE_CREATININE_LEVEL_FIRST'] = 1
         elif 0.4 <= c_level < 0.8:
@@ -1244,14 +2015,14 @@ def POLYNOMIAL_TERMS(target_df):
     :return:
     '''
 
-    target_df['QUAD_CREATINE_MAX'] = target_df['CREATINE_LEVEL_MAX'] ** 2
-    target_df['CUBIC_CREATINE_MAX'] = target_df['CREATINE_LEVEL_MAX'] ** 3
+    target_df['QUAD_CREATININE_MAX'] = target_df['CREATININE_LEVEL_MAX'] ** 2
+    target_df['CUBIC_CREATININE_MAX'] = target_df['CREATININE_LEVEL_MAX'] ** 3
 
     target_df['QUAD_HEMOGLOBIN_MAX'] = target_df['HEMOGLOBIN_LEVEL_MAX'] ** 2
     target_df['CUBIC_HEMOGLOBIN_MAX'] = target_df['HEMOGLOBIN_LEVEL_MAX'] ** 3
 
-    target_df['QUAD_LOS_NEW'] = target_df['LOS_NEW'] ** 2
-    target_df['CUBIC_LOS_NEW'] = target_df['LOS_NEW'] ** 3
+    target_df['QUAD_LOS_NEW'] = target_df['LOS'] ** 2
+    target_df['CUBIC_LOS_NEW'] = target_df['LOS'] ** 3
 
     target_df['QUAD_HOSPITAL_SCORE'] = target_df['HOSPITAL_SCORE'] ** 2
     target_df['CUBIC_HOSPITAL_SCORE'] = target_df['HOSPITAL_SCORE'] ** 3
@@ -1261,6 +2032,9 @@ def POLYNOMIAL_TERMS(target_df):
 
     target_df['QUAD_LACE_SCORE'] = target_df['LACE_SCORE'] ** 2
     target_df['CUBIC_LACE_SCORE'] = target_df['LACE_SCORE'] ** 3
+
+    target_df['QUAD_AKI_DURATION'] = target_df['AKI_DURATION'] ** 2
+    target_df['CUBIC_AKI_DURATION'] = target_df['AKI_DURATION'] ** 3
 
     return target_df
 
@@ -1354,11 +2128,20 @@ def DATA_MANAGEMENT(target_df, visits_df):
     :return:
     '''
 
+    target_df['GAP'] = [0] * len(target_df)
     target_df['LOS_NEW'] = target_df['LOS']
     target_df['NEW_LOS5_FLAG'] = target_df['LOS5_FLAG']
-    target_df['PREVIOUS_YR'] = 1 if target_df['PRIOR_YEAR_ADMISSIONS_COUNT'] > 0 else 0
     target_df['PREVIOUS_30_DAY'] = [0] * len(target_df)
+    target_df['PREVIOUS_30D_SUM'] = [0] * len(target_df)
+    target_df['MORE_PREVIOUS_YR'] = [0] * len(target_df)
+    target_df['MORE_PREVIOUS_YR_SUM'] = [0] * len(target_df)
+    target_df['READMISSIONS'] = [0] * len(target_df)
+    target_df['READMISSIONS_SUM'] = [0] * len(target_df)
     target_df['FLG_30D'] = [0] * len(target_df)
+    target_df['FLG_30D_SUM'] = [0] * len(target_df)
+    target_df['OUTCOME_30DRED'] = [0] * len(target_df)
+    target_df['NEW_LOS5_FLAG_SUM'] = [0] * len(target_df)
+
 
     for iter, row in target_df.iterrows():
         pat_id = row['PERSON_ID']
@@ -1367,7 +2150,8 @@ def DATA_MANAGEMENT(target_df, visits_df):
         ACUTE_MYOCARDIAL_INFARCTION_df = all_visits_df[all_visits_df['CODE'].isin(ACUTE_MYOCARDIAL_INFARCTION_CODE)]
         all_adm_dates = list(ACUTE_MYOCARDIAL_INFARCTION_df['ADM_DATE'].values)
         all_visit_no = list(ACUTE_MYOCARDIAL_INFARCTION_df['VISIT_NO'].values)
-
+        target_df.at[iter, 'PREVIOUS_YR'] = 1 if target_df.at[iter, 'PRIOR_YEAR_ADMISSIONS_COUNT'] > 0 else 0
+        target_df.at[iter, 'PREVIOUS_YR_SUM'] = target_df.at[iter, 'PRIOR_YEAR_ADMISSIONS_COUNT']
         # get the earlist adm and visit_no
         if len(all_adm_dates) > 0:
             date_pairs = list(zip(all_adm_dates, all_visit_no))
@@ -1375,21 +2159,31 @@ def DATA_MANAGEMENT(target_df, visits_df):
             earliest_adm_date, earliest_visit_no = date_pairs[0]
             target_df.at[iter, 'VISIT_NO'] = earliest_visit_no
 
-            # compute prior 30 day
-            prior_30_day_admission = 0
+            # compute
             all_admissions_df = visits_df[visits_df['PAT_ID'] == pat_id]
-            for adm_iter, adm_row in all_admissions_df.iterrows():
-                if 0 < get_date_diff(earliest_adm_date, adm_row['DSCH_DATE']) <= 30:
-                    prior_30_day_admission = 1
-            target_df.at[iter, 'PREVIOUS_30_DAY'] = prior_30_day_admission
-
-
-            # compute flg 30d
+            prior_30_day_admission = 0
             post_30_day_admission = 0
+            readmissions = 0
+            more_previous_yr = 0
+
             for adm_iter, adm_row in all_admissions_df.iterrows():
-                if 0 < get_date_diff(adm_row['ADM_DATE'], earliest_adm_date) <= 30:
-                    post_30_day_admission = 1
-            target_df.at[iter, 'FLG_30D'] = post_30_day_admission
+                if 0 < get_date_diff(adm_row['ADM_DATE'], earliest_adm_date):
+                    readmissions += 1
+                    if get_date_diff(adm_row['ADM_DATE'], earliest_adm_date) <= 30:
+                        post_30_day_admission += 1
+                if 0 < get_date_diff(earliest_adm_date, adm_row['DSCH_DATE']) <= 30:
+                    prior_30_day_admission += 1
+                elif 365 < get_date_diff(earliest_adm_date, adm_row['DSCH_DATE']) :
+                    more_previous_yr += 1
+
+            target_df.at[iter, 'READMISSIONS_SUM'] = readmissions
+            target_df.at[iter, 'READMISSIONS'] = 1 if readmissions > 0 else 0
+            target_df.at[iter, 'PREVIOUS_30D_SUM'] = prior_30_day_admission
+            target_df.at[iter, 'PREVIOUS_30_DAY'] = 1 if prior_30_day_admission > 0 else 0
+            target_df.at[iter, 'FLG_30D_SUM'] = post_30_day_admission
+            target_df.at[iter, 'FLG_30D'] = 1 if post_30_day_admission > 0 else 0
+            target_df.at[iter, 'MORE_PREVIOUS_YR_SUM'] = more_previous_yr
+            target_df.at[iter, 'MORE_PREVIOUS_YR'] = 1 if more_previous_yr > 0 else 0
 
     return target_df
 
@@ -1473,19 +2267,21 @@ if __name__ == '__main__':
     target_df = LABORATORIES(target_df, diagnoses_df, labs_df)
     target_df = PRESENTATION_DISEASE(target_df, diagnoses_df, visits_w_prov_type_df, med_orders_df, procedures_df)
     target_df = ADMINISTRATIVE_DATA(target_df, diagnoses_df, visits_w_prov_type_df)
-    target_df = DEMOGRAPHICS_ADDITIONS(target_df)
+    target_df = DISCHARGE_INFORMATION(target_df,  diagnoses_df, visits_w_prov_type_df, med_orders_df)
+    target_df = DEMOGRAPHICS_ADDITIONS(target_df, visits_w_prov_type_df, diagnoses_df)
     target_df = PATIENT_HISTORY(target_df, diagnoses_df, visits_w_prov_type_df)
     target_df = IN_HOSPITAL_OUTCOMES(target_df, diagnoses_df, procedures_df)
     target_df = COMORBIDITIES(target_df)
     target_df = LACE_SCORE(target_df)
     target_df = ENRICHD_SCORE(target_df, diagnoses_df)
-    target_df = GRACE_SCORE(target_df)
+    target_df = GRACE_SCORE(target_df, labs_df)
     target_df = POLYNOMIAL_TERMS(target_df)
     target_df = DATA_MANAGEMENT(target_df, visits_w_prov_type_df)
     target_df = POST_VANDERNILT(target_df)
-    target_df = INTERACTION_TERMS(target_df)
+    #target_df = INTERACTION_TERMS(target_df)
 
 
     # write the whole table to csv file
     target_df.fillna('')
     target_df.to_csv(TARGET_PATH)
+
