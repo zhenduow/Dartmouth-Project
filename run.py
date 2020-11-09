@@ -175,8 +175,6 @@ COMORBID_RENAL_DISEASE_PATTERN = ['58.\..*', 'N00\..*','N01\..*','N02\..*','N03\
 COMORBID_MODERATE_OR_SEVERE_LIVER_DISEASE_PATTERN = COMORBID_MILD_LIVER_DISEASE_PATTERN
 COMORBID_AIDS_PATTERN = ['042\..*','B20\..*']
 
-
-
 CHF_CODE = ['CHRONIC COMBINED SYSTOLIC AND DIASTOLIC CHF', 'ACUTE ON CHRONIC COMB SYSTOLIC & DIASTOLIC CHF',
             'UNSPECIFIED COMBINED SYSTOLIC & DIASTOLIC CHF', 'ACUTE COMBINED SYSTOLIC AND DIASTOLIC CHF']
 
@@ -1889,11 +1887,11 @@ def GRACE_SCORE(target_df, labs_df):
                 anchor_dates, anchor_creatinines = [ i for i, j in anchor_pairs ], [ j for i, j in anchor_pairs ]
                 baseline_dates, baseline_creatinines = [ i for i, j in baseline_pairs ], [ j for i, j in baseline_pairs ]
 
-                if last_anchor_creatinine/last_baseline_creatinine >= 1.5 or last_anchor_creatinine - last_baseline_creatinine >= 0.3:
+                if last_anchor_creatinine/(last_baseline_creatinine + 0.001) >= 1.5 or last_anchor_creatinine - last_baseline_creatinine >= 0.3:
                     target_df.at[iter, 'AKI_STAGE_VARIABLE'] = 1
-                elif last_anchor_creatinine/last_baseline_creatinine >= 2.0:
+                elif last_anchor_creatinine/(last_baseline_creatinine + 0.001) >= 2.0:
                     target_df.at[iter, 'AKI_STAGE_VARIABLE'] = 2
-                elif last_anchor_creatinine/last_baseline_creatinine >= 3.0:
+                elif last_anchor_creatinine/(last_baseline_creatinine + 0.001) >= 3.0:
                     target_df.at[iter, 'AKI_STAGE_VARIABLE'] = 3
 
                 if target_df.at[iter, 'AKI_STAGE_VARIABLE'] > 0 :
@@ -1901,14 +1899,14 @@ def GRACE_SCORE(target_df, labs_df):
 
                 AKI_dates = []
                 for anchor_serial, anchor in enumerate(anchor_creatinines):
-                    if anchor/last_baseline_creatinine >= 1.5 or anchor - last_baseline_creatinine >= 0.3:
+                    if anchor/(last_baseline_creatinine + 0.001) >= 1.5 or anchor - last_baseline_creatinine >= 0.3:
                         target_df.at[iter, 'AKI_FLAG'] = 1
                         if target_df.at[iter, 'AKI_STAGE_VARIABLE'] == 0:
                             target_df.at[iter,'AKI_RECOVERED_FLAG'] = 1
                         AKI_dates.append(anchor_dates[anchor_serial])
 
-                target_df.at[iter, 'AKI_STAGE_MAX'] = max([a/last_baseline_creatinine for a in anchor_creatinines])
-                target_df.at[iter, 'AKI_STAGE_MIN'] = min([a/last_baseline_creatinine for a in anchor_creatinines])
+                target_df.at[iter, 'AKI_STAGE_MAX'] = max([a/(last_baseline_creatinine + 0.001) for a in anchor_creatinines])
+                target_df.at[iter, 'AKI_STAGE_MIN'] = min([a/(last_baseline_creatinine + 0.001) for a in anchor_creatinines])
 
                 if len(AKI_dates) > 1:
                     target_df.at[iter, 'AKI_DURATION'] = get_date_diff(AKI_dates[-1], AKI_dates[0])
@@ -2280,8 +2278,6 @@ if __name__ == '__main__':
     target_df = POST_VANDERNILT(target_df)
     #target_df = INTERACTION_TERMS(target_df)
 
-
     # write the whole table to csv file
     target_df.fillna('')
     target_df.to_csv(TARGET_PATH)
-
